@@ -3,6 +3,7 @@ import random
 from copy import deepcopy
 import wandb
 import git
+import json
 from tqdm import tqdm
 from pathlib import Path
 from datetime import datetime
@@ -185,6 +186,14 @@ if __name__ == "__main__":
     parser.add_argument("--saving_path", required=True)
     args = parser.parse_args()
 
+    try:
+        personal_data = json.load(open("personal_data.json"))
+        wandb_project = personal_data["wandb"]["project"]
+        wandb_username = personal_data["wandb"]["username"]
+    except:
+        print("Please make sure a JSON file exists called personal_data, \
+        consisting of your WandB project name and user name")
+
     repo = git.Repo(Path(".").absolute(), search_parent_directories=True)
 
     # set training config
@@ -327,7 +336,8 @@ if __name__ == "__main__":
     cross_entropy_loss = nn.CrossEntropyLoss()
 
     # weights and biases
-    with wandb.init(project="project_name", entity="user_name", config=config, name=run_name):
+
+    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=run_name):
 
         # access all hyperparameters through wandb.config, so logging matches execution!
         config = wandb.config
