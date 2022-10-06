@@ -60,12 +60,6 @@ class ResNet18(nn.Module):
                     param.requires_grad = False
 
     def forward(self, x):
-        x = models.resnet18(pretrained=True, ).conv1(x)
-        x = models.resnet18(pretrained=True).bn1(x)
-        x = nn.ReLU(inplace=True)(x)
-        x = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)(x)
-        x = models.resnet18(pretrained=True).layer1(x)
-
         return self.resnet(x)
 
 
