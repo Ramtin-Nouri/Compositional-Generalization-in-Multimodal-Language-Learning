@@ -137,25 +137,20 @@ def get_accuracy(model, data_loader, device, description=""):
 def print_with_time(string):
     print(f"{datetime.now().strftime('%d-%m-%Y %H:%M:%S')} : {str(string)}\n")
 
-
-if __name__ == "__main__":
-    # ensure deterministic behavior
+def set_seeds():
+    """ensure deterministic behavior by setting seeds"""
     torch.backends.cudnn.deterministic = True
     random.seed(hash("setting random seeds") % 2 ** 32 - 1)
     np.random.seed(hash("improves reproducibility") % 2 ** 32 - 1)
     torch.manual_seed(hash("by removing randomness") % 2 ** 32 - 1)
     torch.cuda.manual_seed_all(hash("so results are reproducible") % 2 ** 32 - 1)
 
-    # commandline input
+def parse_commandline_arguments():
+    """Parse the commandline arguments"""
     parser = argparse.ArgumentParser(description="Set configuration for training.")
     # dataset
     parser.add_argument("--data_path", required=True)
     parser.add_argument("--configuration", default="V1-C6-O9")
-    # parser.add_argument("--visible_objects", default="1 2 3 4 5 6")
-    # parser.add_argument("--different_actions", type=int, default=4)
-    # parser.add_argument("--different_colors", type=int, default=6)
-    # parser.add_argument("--different_objects", type=int, default=9)
-    # parser.add_argument("--exclusive_colors", default=False)
     parser.add_argument("--max_frames", type=int, default=16)
     parser.add_argument("--frame_stride", type=int, default=1)
     parser.add_argument("--same_size", default=True)
@@ -184,19 +179,12 @@ if __name__ == "__main__":
     parser.add_argument("--precooked", default=False)
     parser.add_argument("--model_path", default=None)
     parser.add_argument("--saving_path", required=True)
+
     args = parser.parse_args()
+    return args
 
-    try:
-        personal_data = json.load(open("personal_data.json"))
-        wandb_project = personal_data["wandb"]["project"]
-        wandb_username = personal_data["wandb"]["username"]
-    except:
-        print("Please make sure a JSON file exists called personal_data, \
-        consisting of your WandB project name and user name")
-
-    repo = git.Repo(Path(".").absolute(), search_parent_directories=True)
-
-    # set training config
+def set_config():
+    """set training config"""
     config = dict(
         # dataset
         data_path=args.data_path,
@@ -246,26 +234,13 @@ if __name__ == "__main__":
                f"V{visible_objects}A{config['different_actions']}-C{config['different_colors']}-" \
                f"O{config['different_objects']}-{'X-' if config['exclusive_colors'] else ''}" \
                f"{'J-' if not config['no_joints'] else ''}{version}"
+    config["run_name"] = run_name
     save_file = f"{args.saving_path}{slash}{run_name}.pt"
     config["save_file"] = save_file
 
-    dataset_mean = [0.7605, 0.7042, 0.6045]
-    dataset_std = [0.1832, 0.2083, 0.2902]
+    return config
 
-    torchvision_mean = [0.485, 0.456, 0.406]
-    torchvision_std = [0.229, 0.224, 0.225]
-
-    normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
-    torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
-
-    if config["pretrained"]:
-        transform = torchvision_transform
-    else:
-        transform = normal_transform
-        if config["precooked"]:
-            raise ValueError("Only pretrained precooks :-)")
-
-    # datasets
+def load_datasets():
     training_data = MultimodalSimulation(path=config["data_path"],
                                          visible_objects=config["visible_objects"],
                                          different_actions=config["different_actions"],
@@ -301,7 +276,10 @@ if __name__ == "__main__":
                               num_workers=config["num_workers"])
     val_loader = DataLoader(dataset=validation_data, batch_size=config["batch_size"], shuffle=False,
                             num_workers=config["num_workers"])
-    # initiate model
+    return train_loader, val_loader
+
+def load_model(config):
+    """initiate model"""
     if config["sequence_architecture"] == "lstm_encoder_decoder":
         model = EncoderDecoder(vision_architecture=config["vision_architecture"],
                                pretrained_vision=config["pretrained"],
@@ -334,10 +312,48 @@ if __name__ == "__main__":
 
     # loss function
     cross_entropy_loss = nn.CrossEntropyLoss()
+    return model, optimizer, cross_entropy_loss
+
+if __name__ == "__main__":
+    set_seeds()
+
+    args = parse_commandline_arguments()
+
+    # Read personal data from different file
+    try:
+        personal_data = json.load(open("personal_data.json"))
+        wandb_project = personal_data["wandb"]["project"]
+        wandb_username = personal_data["wandb"]["username"]
+    except:
+        print("Please make sure a JSON file exists called personal_data, \
+        consisting of your WandB project name and user name")
+
+    repo = git.Repo(Path(".").absolute(), search_parent_directories=True)
+
+    config = set_config()
+
+    dataset_mean = [0.7605, 0.7042, 0.6045]
+    dataset_std = [0.1832, 0.2083, 0.2902]
+
+    torchvision_mean = [0.485, 0.456, 0.406]
+    torchvision_std = [0.229, 0.224, 0.225]
+
+    normal_transform = transforms.Normalize(mean=dataset_mean, std=dataset_std)
+    torchvision_transform = transforms.Normalize(mean=torchvision_mean, std=torchvision_std)
+
+    if config["pretrained"]:
+        transform = torchvision_transform
+    else:
+        transform = normal_transform
+        if config["precooked"]:
+            raise ValueError("Only pretrained precooks :-)")
+
+    train_loader, val_loader = load_datasets()
+
+    model, optimizer, cross_entropy_loss = load_model(config)
 
     # weights and biases
-
-    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=run_name):
+    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=config["run_name"]):
 
         # access all hyperparameters through wandb.config, so logging matches execution!
         config = wandb.config
