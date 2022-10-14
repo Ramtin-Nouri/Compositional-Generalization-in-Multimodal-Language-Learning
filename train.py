@@ -353,7 +353,8 @@ if __name__ == "__main__":
     model, optimizer, cross_entropy_loss = load_model(config)
 
     # weights and biases
-    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=config["run_name"]):
+    run_name = config["run_name"]
+    with wandb.init(project=wandb_project, entity=wandb_username, config=config, name=run_name):
 
         # access all hyperparameters through wandb.config, so logging matches execution!
         config = wandb.config
